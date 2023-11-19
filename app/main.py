@@ -71,7 +71,7 @@ async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         minutes = int(match.group(1))
 
-        logger.warning(f"creating sitting for user: {user_id}, chat: {chat_id}, message: {text}, minutes: {minutes}")
+        logger.warning(f"Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}")
 
         # Create and add new sitting record
         # todo use pydentics' dataclass to validate the input
@@ -81,7 +81,7 @@ async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         total_minutes_today = await minutes_current_day(chat_id, session)
 
-        logger.warning(f"sitting successfully created. user_id: {chat_id}, minutes: {minutes}")
+        logger.warning(f"Sitting successfully created. user_id: {user_id}, minutes: {minutes}")
         await context.bot.send_message(chat_id=chat_id, text=f"={total_minutes_today}")
 
 
