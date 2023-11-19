@@ -10,6 +10,7 @@ class Sitting(Base):
     __tablename__ = 'sittings'
 
     id = Column(Integer, primary_key=True, index=True)
+    chat_id = Column(String, index=True)
     user_id = Column(String, index=True)
     duration_m = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
