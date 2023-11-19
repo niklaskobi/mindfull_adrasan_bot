@@ -5,6 +5,7 @@ from sqlalchemy.sql import func
 
 Base = declarative_base()
 
+
 class Sitting(Base):
     __tablename__ = 'sittings'
 

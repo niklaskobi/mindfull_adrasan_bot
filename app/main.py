@@ -16,7 +16,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Здаров!")
 
 
-async def update_meditation_minutes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Update meditation: {text}")
 
@@ -35,15 +35,14 @@ if __name__ == '__main__':
 
     # Handlers
     start_handler = CommandHandler('start', start)
-    counter_minutes_handler = MessageHandler(filters.Regex("^\s*[+-]\s*\d{1,3}$"), update_meditation_minutes)
-    counter_meta_handler = MessageHandler(filters.Regex("^\s*\+\s*(мета|meta)\s*$"), update_meta_counter)
+    sittings_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting)
+    # counter_meta_handler = MessageHandler(filters.Regex("^\s*\+\s*(мета|meta)\s*$"), update_meta_counter)
     # Other handlers
     unknown_handler = MessageHandler(filters.COMMAND, unknown)
 
     # Add handlers
     application.add_handler(start_handler)
-    application.add_handler(counter_minutes_handler)
-    application.add_handler(counter_meta_handler)
+    application.add_handler(sittings_handler)
     application.add_handler(unknown_handler)  # Note: This handler must be added last
 
     application.run_polling()
