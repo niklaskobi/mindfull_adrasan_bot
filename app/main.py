@@ -20,7 +20,7 @@ logger = logging.getLogger(LOGGER_MAIN)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Здаров!")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Привет!")
 
 
 async def daily_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -57,7 +57,7 @@ async def remove_todays_entries(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(chat_id=chat_id, text="Удалил все ваши сегодняшние минуты")
 
 
-async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_sitting_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with SessionLocal() as session:
         chat_id = update.effective_chat.id
         user_id = update.effective_user.id
@@ -67,11 +67,12 @@ async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
         match = re.search(r"[+-]?\s*(\d+)", text)
         if not match:
             await context.bot.send_message(chat_id=chat_id,
-                                           text="Invalid format. Please enter the minutes as '+10', '+ 10', etc.")
+                                           text="Не могу распознать. Пожалуйста, введите минуты в формате '+10', '+ 10', ...")
             return
         minutes = int(match.group(1))
 
-        logger.warning(f"Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}")
+        logger.warning(
+            f"Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}")
 
         # Create and add new sitting record
         # todo use pydentics' dataclass to validate the input
@@ -85,6 +86,62 @@ async def create_sitting(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"={total_minutes_today}")
 
 
+async def create_sitting_on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    with SessionLocal() as session:
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+        text = update.message.text.strip()
+
+        # Use regular expression to extract the number of minutes
+        match = re.search(r"[+-]?\s*(\d+)\s*(\d{1,2})\.(\d{1,2})\.(\d{4})", text)
+        if not match:
+            await context.bot.send_message(chat_id=chat_id,
+                                           text="Не могу распознать. Пожалуйста, введите минуты в формате '+10 01.11.2023', '+ 10 01.11.2023', ...")
+            return
+
+        # Check if the date is valid
+        try:
+            date = datetime(int(match.group(4)), int(match.group(3)), int(match.group(2)))
+            # Check if the date is in the future
+            if date > datetime.now():
+                await context.bot.send_message(chat_id=chat_id, text="Не могу добавить будущую дату.")
+                return
+            # Check if date is older than 1 week:
+            if date < datetime.now() - timedelta(days=7):
+                await context.bot.send_message(chat_id=chat_id,
+                                               text="Неверная дата. Дата должна быть не старше 7 дней.")
+                return
+        except ValueError:
+            await context.bot.send_message(chat_id=chat_id,
+                                           text="Неверная дата. Пожалуйста, введите дату в формате '+10 01.11.2023', '+ 10 01.11.2023', ...")
+            return
+
+        # Insert the sitting into the database
+        minutes = int(match.group(1))
+        day = int(match.group(2))
+        month = int(match.group(3))
+        year = int(match.group(4))
+
+        logger.warning(
+            f'Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}, date: {day}.{month}.{year}')
+
+        # Create and add new sitting record
+        # todo use pydentics' dataclass to validate the input
+        new_sitting = Sitting(chat_id=str(chat_id), user_id=user_id, duration_m=minutes,
+                              created_at=datetime(year, month, day))
+        session.add(new_sitting)
+        session.commit()
+
+        # if date is today, send the total minutes
+        if date == datetime.now().date():
+            total_minutes_today = await minutes_current_day(chat_id, session)
+            await context.bot.send_message(chat_id=chat_id, text=f"={total_minutes_today}")
+        else:
+            # format date in form of 01.11.2023
+            d = date.strftime("%d.%m.%Y")
+            await context.bot.send_message(chat_id=chat_id, text=f"Медитация успешно добавлена на {d}")
+
+
 async def minutes_current_day(chat_id, session):
     # Calculate the sum of all meditation minutes for the current day for the current chat_id
     today = datetime.now().date()
@@ -96,17 +153,40 @@ async def minutes_current_day(chat_id, session):
     return total_minutes_today
 
 
+async def week_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    with SessionLocal() as session:
+        chat_id = update.effective_chat.id
+        stats = await get_week_stats_from_db(chat_id, session)
+        # Pretty print the stats
+        stats = "\n".join([f"{day.strftime('%d.%m.%Y')}: {minutes} мин" for minutes, day in stats])
+        await context.bot.send_message(chat_id=chat_id, text=f"Статистика за последнюю неделю:\n{stats}")
+
+
+async def get_week_stats_from_db(chat_id, session):
+    # Get minutes for the previous 7 days
+    today = datetime.now().date()
+    today_end_of_day = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    seven_days_ago = today - timedelta(days=7)
+    previous_days = session.query(func.sum(Sitting.duration_m), func.date(Sitting.created_at)). \
+        filter(Sitting.chat_id == str(chat_id),
+               Sitting.created_at >= seven_days_ago,
+               Sitting.created_at <= today_end_of_day). \
+        group_by(func.date(Sitting.created_at)). \
+        order_by(func.date(Sitting.created_at)).all()
+    print(f"previous_days: {previous_days}")
+    return previous_days
+
+
 async def update_meta_counter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Update meta: {text}")
 
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Сорян, не понял команду.")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Сорри, не понял команду.")
 
 
 if __name__ == '__main__':
-
     logger.warning("Starting bot")
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -115,7 +195,10 @@ if __name__ == '__main__':
     start_handler = CommandHandler('start', start)
     daily_stats_handler = CommandHandler('today', daily_stats)
     remove_stats_handler = CommandHandler('remove', remove_todays_entries)
-    add_sittings_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting)
+    week_stats_handler = CommandHandler('week', week_stats)
+    add_sittings_today_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting_today)
+    add_sittings_on_date_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}\s*\d{1,2}\.\d{1,2}\.\d{4}$"),
+                                                  create_sitting_on_date)
     # counter_meta_handler = MessageHandler(filters.Regex("^\s*\+\s*(мета|meta)\s*$"), update_meta_counter)
     # Other handlers
     unknown_handler = MessageHandler(filters.COMMAND, unknown)
@@ -124,7 +207,9 @@ if __name__ == '__main__':
     application.add_handler(start_handler)
     application.add_handler(daily_stats_handler)
     application.add_handler(remove_stats_handler)
-    application.add_handler(add_sittings_handler)
+    application.add_handler(week_stats_handler)
+    application.add_handler(add_sittings_today_handler)
+    application.add_handler(add_sittings_on_date_handler)
     application.add_handler(unknown_handler)  # Note: This handler must be added last
 
     logger.warning("Bot started")
