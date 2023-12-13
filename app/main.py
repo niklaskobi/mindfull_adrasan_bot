@@ -86,6 +86,50 @@ async def create_sitting_today(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(chat_id=chat_id, text=f"={total_minutes_today}")
 
 
+
+def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Remove job with given name. Returns whether job was removed."""
+    current_jobs = []
+    try:
+        current_jobs = context.job_queue.get_jobs_by_name(name)
+    except Exception as e:
+        logger.warning(f"Error getting jobs: {e}")
+
+    if not current_jobs:
+        return False
+    for job in current_jobs:
+        job.schedule_removal()
+    return True
+
+
+
+async def set_daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Add a job to the queue."""
+    with SessionLocal() as session:
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+
+        # args[0] should contain the time for the timer in seconds
+        # check if args[0] is a time string in format HH:MM
+        if len(context.args) > 0 and re.match(r"^\d{1,2}:\d{1,2}$", context.args[0]):
+            # get time from context.args[0]
+            time = context.args[0]
+            # create date.time object
+            due = datetime.combine(datetime.today().date(), datetime.strptime(time, "%H:%M").time())
+            job_removed = remove_job_if_exists(str(chat_id), context)
+            context.job_queue.run_daily(week_stats_from_job, due, chat_id=chat_id, name=str(chat_id), data=due)
+            text = "Таймер успешно установлен на " + time + " по UTC."
+            if job_removed:
+                text += " Старый таймер удален."
+            await update.effective_message.reply_text(text)
+
+        else:
+            await update.effective_message.reply_text("Сорри, не могу распознать. Пожалуйста, введите время в формате 'HH:MM'")
+            return
+
+
+
+
 async def create_sitting_on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with SessionLocal() as session:
         chat_id = update.effective_chat.id
@@ -153,9 +197,19 @@ async def minutes_current_day(chat_id, session):
     return total_minutes_today
 
 
-async def week_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def week_stats_from_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_week_stats_to_chat(update.effective_chat.id, context)
+
+
+async def week_stats_from_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the alarm message."""
+    job = context.job
+    await send_week_stats_to_chat(job.chat_id, context)
+
+
+
+async def send_week_stats_to_chat(chat_id, context: ContextTypes.DEFAULT_TYPE):
     with SessionLocal() as session:
-        chat_id = update.effective_chat.id
         stats = await get_week_stats_from_db(chat_id, session)
         # Pretty print the stats
         stats = "\n".join([f"{day.strftime('%d.%m.%Y')}: {minutes} мин" for minutes, day in stats])
@@ -195,7 +249,8 @@ if __name__ == '__main__':
     start_handler = CommandHandler('start', start)
     daily_stats_handler = CommandHandler('today', daily_stats)
     remove_stats_handler = CommandHandler('remove', remove_todays_entries)
-    week_stats_handler = CommandHandler('week', week_stats)
+    set_daily_midnight_job_handler = CommandHandler('schedule_job', set_daily_job)
+    week_stats_handler = CommandHandler('week', week_stats_from_command)
     add_sittings_today_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting_today)
     add_sittings_on_date_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}\s*\d{1,2}\.\d{1,2}\.\d{4}$"),
                                                   create_sitting_on_date)
@@ -210,8 +265,10 @@ if __name__ == '__main__':
     application.add_handler(week_stats_handler)
     application.add_handler(add_sittings_today_handler)
     application.add_handler(add_sittings_on_date_handler)
+    application.add_handler(set_daily_midnight_job_handler)
     application.add_handler(unknown_handler)  # Note: This handler must be added last
 
     logger.warning("Bot started")
 
-    application.run_polling()
+    # application.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)

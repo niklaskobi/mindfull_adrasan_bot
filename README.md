@@ -12,3 +12,10 @@ To create a new migration:
 ```
 alembic revision -m "<message>"
 ```
+
+
+## Heroku
+To deploy to heroku:
+```
+git push heroku main
+```
