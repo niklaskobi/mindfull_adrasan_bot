@@ -42,7 +42,7 @@ async def remove_todays_entries(update: Update, context: ContextTypes.DEFAULT_TY
         tomorrow = today + timedelta(days=1)
 
         # Query to find today's entries for the current user
-        todays_entries = session.query(Sitting). \
+        todays_entries = session.query_daily_duration_sums(Sitting). \
             filter(Sitting.user_id == str(user_id),
                    Sitting.chat_id == str(chat_id),
                    Sitting.created_at >= today,
@@ -190,7 +190,7 @@ async def minutes_current_day(chat_id, session):
     # Calculate the sum of all meditation minutes for the current day for the current chat_id
     today = datetime.now().date()
     tomorrow = today + timedelta(days=1)
-    total_minutes_today = session.query(func.sum(Sitting.duration_m)). \
+    total_minutes_today = session.query_daily_duration_sums(func.sum(Sitting.duration_m)). \
         filter(Sitting.chat_id == str(chat_id),
                Sitting.created_at >= today,
                Sitting.created_at < tomorrow).scalar()
@@ -221,7 +221,7 @@ async def get_week_stats_from_db(chat_id, session):
     today = datetime.now().date()
     today_end_of_day = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
     seven_days_ago = today - timedelta(days=7)
-    previous_days = session.query(func.sum(Sitting.duration_m), func.date(Sitting.created_at)). \
+    previous_days = session.query_daily_duration_sums(func.sum(Sitting.duration_m), func.date(Sitting.created_at)). \
         filter(Sitting.chat_id == str(chat_id),
                Sitting.created_at >= seven_days_ago,
                Sitting.created_at <= today_end_of_day). \
