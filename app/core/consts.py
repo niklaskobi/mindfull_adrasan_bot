@@ -13,4 +13,4 @@ DB_USER = os.environ.get("DB_USER")
 DB_PASSWORD = os.environ.get("DB_PASSWORD")
 DB_HOST = os.environ.get("DB_HOST")
 DB_ENDPOINT = os.environ.get("DB_ENDPOINT")
-DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_ENDPOINT}/postgres"
+DB_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_ENDPOINT}/postgres"
