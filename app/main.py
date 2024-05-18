@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, cast, distinct, Date
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
@@ -42,7 +42,7 @@ async def remove_todays_entries(update: Update, context: ContextTypes.DEFAULT_TY
         tomorrow = today + timedelta(days=1)
 
         # Query to find today's entries for the current user
-        todays_entries = session.query_daily_duration_sums(Sitting). \
+        todays_entries = session.query(Sitting). \
             filter(Sitting.user_id == str(user_id),
                    Sitting.chat_id == str(chat_id),
                    Sitting.created_at >= today,
@@ -86,7 +86,6 @@ async def create_sitting_today(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(chat_id=chat_id, text=f"={total_minutes_today}")
 
 
-
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Remove job with given name. Returns whether job was removed."""
     current_jobs = []
@@ -100,7 +99,6 @@ def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
     for job in current_jobs:
         job.schedule_removal()
     return True
-
 
 
 async def set_daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,10 +122,9 @@ async def set_daily_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await update.effective_message.reply_text(text)
 
         else:
-            await update.effective_message.reply_text("Сорри, не могу распознать. Пожалуйста, введите время в формате 'HH:MM'")
+            await update.effective_message.reply_text(
+                "Сорри, не могу распознать. Пожалуйста, введите время в формате 'HH:MM'")
             return
-
-
 
 
 async def create_sitting_on_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,7 +187,7 @@ async def minutes_current_day(chat_id, session):
     # Calculate the sum of all meditation minutes for the current day for the current chat_id
     today = datetime.now().date()
     tomorrow = today + timedelta(days=1)
-    total_minutes_today = session.query_daily_duration_sums(func.sum(Sitting.duration_m)). \
+    total_minutes_today = session.query(func.sum(Sitting.duration_m)). \
         filter(Sitting.chat_id == str(chat_id),
                Sitting.created_at >= today,
                Sitting.created_at < tomorrow).scalar()
@@ -207,7 +204,6 @@ async def week_stats_from_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_week_stats_to_chat(job.chat_id, context)
 
 
-
 async def send_week_stats_to_chat(chat_id, context: ContextTypes.DEFAULT_TYPE):
     with SessionLocal() as session:
         stats = await get_week_stats_from_db(chat_id, session)
@@ -216,19 +212,104 @@ async def send_week_stats_to_chat(chat_id, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"Статистика за последнюю неделю:\n{stats}")
 
 
+async def my_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    with SessionLocal() as session:
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+        if chat_id != user_id:
+            await context.bot.send_message(chat_id=chat_id,
+                                           text="Извините, но я могу показать статистику только для вас.")
+            return
+
+        data = await get_my_stats_from_db(user_id, session)
+        if data:
+            total_duration, average_duration, total_entries, first_entry_date, last_entry_date = data
+            active_days_percentage = await get_percentage_active_days(user_id, session)
+            # active_days_percentage = round(active_days_percentage, 2)
+            last_streak = await get_streak_stats_from_db(user_id, session)
+            label_width = 30
+            value_width = 10
+            text = (
+                f"{'Всего минут:'.ljust(label_width)} {int(total_duration / 60)}ч {total_duration % 60}м\n"
+                f"{'Всего медитаций:'.ljust(label_width)} {total_entries}\n"
+                f"{'Средняя длина:'.ljust(label_width)} {average_duration:.2f}м\n"
+                f"{'% дней с медитациями:'.ljust(label_width)} {active_days_percentage:.2f}%\n"
+                f"{'Стрик:'.ljust(label_width)} {last_streak} дней"
+            )
+            text = f"```\n<pre>\n{text}\n</pre>\n```"
+            text = f"```\n{text}\n```"
+
+            await context.bot.send_message(
+                # chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
+                chat_id=update.effective_chat.id, text=text, parse_mode='MarkdownV2')
+
+        else:
+            print("No data found for user ID:", user_id)
+
+
 async def get_week_stats_from_db(chat_id, session):
     # Get minutes for the previous 7 days
     today = datetime.now().date()
     today_end_of_day = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
     seven_days_ago = today - timedelta(days=7)
-    previous_days = session.query_daily_duration_sums(func.sum(Sitting.duration_m), func.date(Sitting.created_at)). \
+    previous_days = session.query(func.sum(Sitting.duration_m), func.date(Sitting.created_at)). \
         filter(Sitting.chat_id == str(chat_id),
                Sitting.created_at >= seven_days_ago,
                Sitting.created_at <= today_end_of_day). \
         group_by(func.date(Sitting.created_at)). \
         order_by(func.date(Sitting.created_at)).all()
-    print(f"previous_days: {previous_days}")
     return previous_days
+
+
+async def get_percentage_active_days(user_id, session):
+    # Query to count distinct days with entries and the range of dates
+    days_with_entries = session.query(
+        func.count(distinct(cast(Sitting.created_at, Date))).label('days_with_entries'),
+        func.min(Sitting.created_at).label('first_entry_date'),
+        func.max(Sitting.created_at).label('last_entry_date')
+    ).filter(Sitting.user_id == str(user_id)).one()
+
+    total_days = (days_with_entries.last_entry_date - days_with_entries.first_entry_date).days + 1
+    percentage_of_days_with_entries = (days_with_entries.days_with_entries / total_days) * 100
+
+    return percentage_of_days_with_entries
+
+
+async def get_streak_stats_from_db(user_id, session):
+    # Query to get all distinct dates with entries
+    entry_dates = session.query(
+        distinct(cast(Sitting.created_at, Date)).label('entry_date')
+    ).filter(Sitting.user_id == str(user_id)).order_by(cast(Sitting.created_at, Date)).all()
+
+    # Convert list of tuples to list of dates
+    entry_dates = [date.entry_date for date in entry_dates]
+
+    # Calculate the last streak
+    last_streak = 0
+    current_streak = 0
+    previous_date = None
+
+    for date in reversed(entry_dates):
+        if previous_date is None or previous_date - timedelta(days=1) == date:
+            current_streak += 1
+        else:
+            break  # Break the loop once a gap is found
+        previous_date = date
+
+    last_streak = current_streak
+
+    return last_streak
+
+
+async def get_my_stats_from_db(user_id, session):
+    query_data = session.query(
+        func.sum(Sitting.duration_m).label('total_duration'),
+        func.avg(Sitting.duration_m).label('average_duration'),
+        func.count().label('total_entries'),
+        func.min(Sitting.created_at).label('first_entry_date'),
+        func.max(Sitting.created_at).label('last_entry_date')
+    ).filter(Sitting.user_id == str(user_id)).one()
+    return query_data
 
 
 async def update_meta_counter(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -251,6 +332,7 @@ if __name__ == '__main__':
     remove_stats_handler = CommandHandler('remove', remove_todays_entries)
     set_daily_midnight_job_handler = CommandHandler('schedule_job', set_daily_job)
     week_stats_handler = CommandHandler('week', week_stats_from_command)
+    my_history_handler = CommandHandler('history', my_history)
     add_sittings_today_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting_today)
     add_sittings_on_date_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}\s*\d{1,2}\.\d{1,2}\.\d{4}$"),
                                                   create_sitting_on_date)
@@ -263,6 +345,7 @@ if __name__ == '__main__':
     application.add_handler(daily_stats_handler)
     application.add_handler(remove_stats_handler)
     application.add_handler(week_stats_handler)
+    application.add_handler(my_history_handler)
     application.add_handler(add_sittings_today_handler)
     application.add_handler(add_sittings_on_date_handler)
     application.add_handler(set_daily_midnight_job_handler)
