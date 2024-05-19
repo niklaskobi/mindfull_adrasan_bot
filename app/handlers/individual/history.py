@@ -9,7 +9,7 @@ from app.db.models import Sitting
 from app.dependencies import logger
 
 
-async def me_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def me_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     if chat_id != user_id:
