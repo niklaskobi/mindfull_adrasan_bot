@@ -1,6 +1,6 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 
-from sqlalchemy import func, distinct, cast, Date, select
+from sqlalchemy import func, distinct, cast, Date, select, case
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -19,13 +19,14 @@ async def me_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = await get_user_stats(user_id)
     if data:
-        label_width = 30
+        label_width = 20
         text = (
             f"{'Всего минут:'.ljust(label_width)} {int(data['total_duration'] / 60)}ч {data['total_duration'] % 60}м\n"
             f"{'Всего медитаций:'.ljust(label_width)} {data['total_entries']}\n"
             f"{'Средняя длина:'.ljust(label_width)} {data['average_duration']:.2f}м\n"
-            f"{'% дней с медитациями:'.ljust(label_width)} {data['active_days_percentage']:.2f}%\n"
-            f"{'Серия:'.ljust(label_width)} {data['last_streak']}\n"
+            f"{'% за все время:'.ljust(label_width)} {data['active_days_percentage']:.2f}%\n"
+            f"{'% за все месяц:'.ljust(label_width)} {data['current_month_percentage']:.2f}%\n"
+            f"{'Стрик:'.ljust(label_width)} {data['last_streak']}\n"
         )
         # text = f"```\n<pre>\n{text}\n</pre>\n```"
         text = f"```\n{text}\n```"
@@ -42,14 +43,21 @@ async def me_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_user_stats(user_id):
     async with async_session() as session:
-        # Query all necessary statistics and date range for percentage calculation
+        # Get the current date
+        now = datetime.now()
+        start_of_month = datetime(now.year, now.month, 1)
+
+        # Define the main query with all necessary calculations
         stats_query = select(
             func.sum(Sitting.duration_m).label('total_duration'),
             func.avg(Sitting.duration_m).label('average_duration'),
             func.count().label('total_entries'),
             func.min(Sitting.created_at).label('first_entry_date'),
             func.max(Sitting.created_at).label('last_entry_date'),
-            func.count(distinct(cast(Sitting.created_at, Date))).label('days_with_entries')
+            func.count(distinct(cast(Sitting.created_at, Date))).label('days_with_entries'),
+            func.count(distinct(case(
+                (cast(Sitting.created_at, Date) >= start_of_month, cast(Sitting.created_at, Date)),
+            ))).label('current_month_days')
         ).filter(Sitting.user_id == str(user_id))
 
         # Execute the query
@@ -60,13 +68,16 @@ async def get_user_stats(user_id):
         total_days = (stats.last_entry_date - stats.first_entry_date).days + 1
         active_days_percentage = (stats.days_with_entries / total_days) * 100
 
+        # Calculate the percentage of meditation days in the current month
+        total_days_passed_in_current_month = (now - start_of_month).days + 1
+        current_month_percentage = (stats.current_month_days / total_days_passed_in_current_month) * 100
+
         # Query to get all distinct dates for streak calculation
         entry_dates_query = select(distinct(cast(Sitting.created_at, Date)).label('entry_date')).\
             filter(Sitting.user_id == str(user_id)).\
             order_by(cast(Sitting.created_at, Date))
 
         entry_dates_result = await session.execute(entry_dates_query)
-        # entry_dates = [date.entry_date for date in entry_dates_result.scalars()]
         entry_dates = [date for date in entry_dates_result.scalars()]
 
         # Calculate the last streak
@@ -89,6 +100,7 @@ async def get_user_stats(user_id):
             "first_entry_date": stats.first_entry_date,
             "last_entry_date": stats.last_entry_date,
             "active_days_percentage": active_days_percentage,
-            "last_streak": last_streak
+            "last_streak": last_streak,
+            "current_month_percentage": current_month_percentage
         }
 
