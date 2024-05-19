@@ -25,8 +25,7 @@ async def me_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{'Всего медитаций:'.ljust(label_width)} {data['total_entries']}\n"
             f"{'Средняя длина:'.ljust(label_width)} {data['average_duration']:.2f}м\n"
             f"{'% за все время:'.ljust(label_width)} {data['active_days_percentage']:.2f}%\n"
-            f"{'% за все месяц:'.ljust(label_width)} {data['current_month_percentage']:.2f}%\n"
-            f"{'Стрик:'.ljust(label_width)} {data['last_streak']}\n"
+            f"{'% за этот месяц:'.ljust(label_width)} {data['current_month_percentage']:.2f}%\n"
         )
         # text = f"```\n<pre>\n{text}\n</pre>\n```"
         text = f"```\n{text}\n```"
@@ -72,27 +71,6 @@ async def get_user_stats(user_id):
         total_days_passed_in_current_month = (now - start_of_month).days + 1
         current_month_percentage = (stats.current_month_days / total_days_passed_in_current_month) * 100
 
-        # Query to get all distinct dates for streak calculation
-        entry_dates_query = select(distinct(cast(Sitting.created_at, Date)).label('entry_date')).\
-            filter(Sitting.user_id == str(user_id)).\
-            order_by(cast(Sitting.created_at, Date))
-
-        entry_dates_result = await session.execute(entry_dates_query)
-        entry_dates = [date for date in entry_dates_result.scalars()]
-
-        # Calculate the last streak
-        current_streak = 0
-        previous_date = None
-
-        for date in reversed(entry_dates):
-            if previous_date is None or previous_date - timedelta(days=1) == date:
-                current_streak += 1
-            else:
-                break  # Break the loop once a gap is found
-            previous_date = date
-
-        last_streak = current_streak
-
         return {
             "total_duration": stats.total_duration,
             "average_duration": stats.average_duration,
@@ -100,7 +78,6 @@ async def get_user_stats(user_id):
             "first_entry_date": stats.first_entry_date,
             "last_entry_date": stats.last_entry_date,
             "active_days_percentage": active_days_percentage,
-            "last_streak": last_streak,
             "current_month_percentage": current_month_percentage
         }
 
