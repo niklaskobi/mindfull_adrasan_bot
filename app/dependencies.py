@@ -9,4 +9,5 @@ logging.basicConfig(
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+logging.getLogger(LOGGER_MAIN).setLevel(logging.INFO)
 logger = logging.getLogger(LOGGER_MAIN)

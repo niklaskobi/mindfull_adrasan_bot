@@ -5,9 +5,10 @@ from app.core.consts import BOT_TOKEN
 from app.dependencies import logger
 from app.handlers.common.add import create_sitting_today, create_sitting_on_date
 from app.handlers.common.misc import start, unknown
-from app.handlers.common.today import today, remove_todays_entries
-from app.handlers.group.week import week
-from app.handlers.individual.history import me_stats
+from app.handlers.common.get import today
+from app.handlers.common.remove import remove_today_entries
+from app.handlers.group.get import week
+from app.handlers.individual.get import me_stats
 
 if __name__ == '__main__':
     logger.warning("Starting bot")
@@ -17,7 +18,7 @@ if __name__ == '__main__':
     # Handlers
     start_handler = CommandHandler('start', start)
     daily_stats_handler = CommandHandler('today', today)
-    remove_stats_handler = CommandHandler('remove', remove_todays_entries)
+    remove_stats_handler = CommandHandler('remove', remove_today_entries)
     week_stats_handler = CommandHandler('week', week)
     me_history_handler = CommandHandler('me', me_stats)
     add_sittings_today_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting_today)
