@@ -8,7 +8,7 @@ from app.handlers.common.misc import start, unknown
 from app.handlers.common.get import today
 from app.handlers.common.remove import remove_today_entries
 from app.handlers.group.get import week
-from app.handlers.individual.get import me_stats
+from app.handlers.individual.get import stats
 
 if __name__ == '__main__':
     logger.warning("Starting bot")
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     daily_stats_handler = CommandHandler('today', today)
     remove_stats_handler = CommandHandler('remove', remove_today_entries)
     week_stats_handler = CommandHandler('week', week)
-    me_history_handler = CommandHandler('me', me_stats)
+    me_history_handler = CommandHandler('stats', stats)
     add_sittings_today_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}$"), create_sitting_today)
     add_sittings_on_date_handler = MessageHandler(filters.Regex("^\s*\+\s*\d{1,3}\s*\d{1,2}\.\d{1,2}\.\d{4}$"),
                                                   create_sitting_on_date)

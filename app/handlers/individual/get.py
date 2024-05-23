@@ -8,7 +8,7 @@ from app.db.database import async_session
 from app.dependencies import logger
 
 
-async def me_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     if chat_id != user_id:
