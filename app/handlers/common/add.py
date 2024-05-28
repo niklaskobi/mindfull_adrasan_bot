@@ -27,7 +27,11 @@ async def create_sitting_today(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}")
 
     # Create and add new sitting record
-    new_sitting = schemas.SittingCreate(chat_id=str(chat_id), user_id=str(user_id), duration_m=minutes)
+    new_sitting = schemas.SittingCreate(
+        chat_id=str(chat_id),
+        user_id=str(user_id),
+        duration_m=minutes,
+        created_at=datetime.now())
     async with async_session() as session:
         await crud.create_sitting(session=session, sitting=new_sitting)
         total_minutes_today = await crud.get_minutes_current_day(session=session, chat_id=chat_id)
@@ -54,10 +58,10 @@ async def create_sitting_on_date(update: Update, context: ContextTypes.DEFAULT_T
         if date > datetime.now():
             await context.bot.send_message(chat_id=chat_id, text="Не могу добавить будущую дату.")
             return
-        # Check if date is older than 1 week:
-        if date < datetime.now() - timedelta(days=7):
+        # Check if date is older than 1 month:
+        if date < datetime.now() - timedelta(days=30):
             await context.bot.send_message(chat_id=chat_id,
-                                           text="Неверная дата. Дата должна быть не старше 7 дней.")
+                                           text="Неверная дата. Дата должна быть не старше 30 дней.")
             return
     except ValueError:
         await context.bot.send_message(chat_id=chat_id,
@@ -74,7 +78,8 @@ async def create_sitting_on_date(update: Update, context: ContextTypes.DEFAULT_T
         f'Creating sitting for user: {update.effective_user.username} ({user_id}), chat: {chat_id}, message: {text}, minutes: {minutes}, date: {day}.{month}.{year}')
 
     # Create and add new sitting record
-    new_sitting = schemas.SittingCreate(chat_id=str(chat_id), user_id=str(user_id), duration_m=minutes)
+    date = datetime(year, month, day)
+    new_sitting = schemas.SittingCreate(chat_id=str(chat_id), user_id=str(user_id), duration_m=minutes, created_at=date)
     async with async_session() as session:
         await crud.create_sitting(session=session, sitting=new_sitting)
 

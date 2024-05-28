@@ -1,1 +1,2 @@
 about = "Mindfull Adrasan Bot is a meditation tracking tool that records individual and group meditation sessions, providing daily summaries and personal statistics. It's a user-friendly application designed to motivate consistent meditation practice and track progress over time."
+TIME_ZONE = "Europe/Berlin"

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -9,7 +11,7 @@ class SittingBase(BaseModel):
 
 
 class SittingCreate(SittingBase):
-    pass
+    created_at: Optional[datetime] = None
 
 
 class SittingRead(SittingBase):
