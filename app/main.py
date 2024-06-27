@@ -5,10 +5,12 @@ from app.core.consts import BOT_TOKEN
 from app.dependencies import logger
 from app.handlers.common.add import create_sitting_today, create_sitting_on_date
 from app.handlers.common.misc import start, unknown
-from app.handlers.common.get import today
+from app.handlers.common.get import today, week
 from app.handlers.common.remove import remove_today_entries
-from app.handlers.group.get import week
 from app.handlers.individual.get import stats
+
+
+#todo fix fetching data from db, like i did in the last commit
 
 if __name__ == '__main__':
     logger.warning("Starting bot")

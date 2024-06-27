@@ -1,16 +1,12 @@
 from datetime import datetime, timedelta, date, timezone
 
+import pytz
 from sqlalchemy import delete
 from sqlalchemy import func, distinct, cast, Date, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import models, schemas
 from ..config import TIME_ZONE
-
-
-async def get_sitting(session: AsyncSession, sitting_id: int):
-    result = await session.execute(select(models.Sitting).filter(models.Sitting.id == sitting_id))
-    return result.scalars().first()
 
 
 async def create_sitting(session: AsyncSession, sitting: schemas.SittingCreate):
@@ -29,7 +25,7 @@ async def create_sitting(session: AsyncSession, sitting: schemas.SittingCreate):
 async def remove_sittings_at_date(session: AsyncSession, user_id: int, chat_id: int, date: date):
     result = await session.execute(
         delete(models.Sitting)
-        .where(func.date(models.Sitting.created_at) == date)
+        .where(func.date(func.timezone(TIME_ZONE, models.Sitting.created_at)) == date)
         .where(models.Sitting.user_id == str(user_id))
         .where(models.Sitting.chat_id == str(chat_id))
     )
@@ -39,9 +35,10 @@ async def remove_sittings_at_date(session: AsyncSession, user_id: int, chat_id: 
 
 async def get_minutes_current_day(session: AsyncSession, chat_id: int):
     """
-    Calculate the sum of all meditation minutes for the current day for the current chat_id
+    Calculate the sum of all meditation minutes for the current day for the current chat_id, considering the specified timezone.
     """
-    today = datetime.now().date()
+    tz = pytz.timezone(TIME_ZONE)
+    today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow = today + timedelta(days=1)
 
     query = select(
@@ -53,12 +50,11 @@ async def get_minutes_current_day(session: AsyncSession, chat_id: int):
     )
 
     result = await session.execute(query)
-
     return result.scalar()
 
 
 async def get_user_stats(session: AsyncSession, user_id: int):
-    now = datetime.now()
+    now = datetime.now(pytz.timezone(TIME_ZONE))
     start_of_month = datetime(now.year, now.month, 1)
 
     # Define the main query with all necessary calculations
