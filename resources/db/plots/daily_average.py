@@ -2,7 +2,7 @@ import psycopg2
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from app.core.consts import DB_USER, DB_PASSWORD, DB_URL, DB_HOST
+from app.core.consts import DB_USER, DB_PASSWORD, DB_HOST
 
 # SQL query to calculate the average duration per user per day
 query_avg_duration_per_user_per_day = """

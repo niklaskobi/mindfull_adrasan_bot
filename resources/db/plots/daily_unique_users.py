@@ -2,7 +2,7 @@ import psycopg2
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from app.core.consts import DB_USER, DB_PASSWORD, DB_URL, DB_HOST
+from app.core.consts import DB_USER, DB_PASSWORD, DB_HOST
 
 # SQL query to count unique users per day
 query_daily_unique_users = """
